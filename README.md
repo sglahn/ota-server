@@ -4,7 +4,7 @@ Serves firmware binary files for Arduino (or ESP, ...) OTA projects.
 
 ## Features
 - Generic delivery of firmware images based on naming scheme
-- Self contained
+- Self contained, pure Python
 - SSL
 
 ## Usage
