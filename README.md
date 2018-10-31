@@ -12,6 +12,17 @@ Example usage:
 ```
 ./server.py --dir=/my-firmware-directory
 ```
+Or via Docker
+```
+docker run -p 8000:8000 -v /my-firmware-directory:/firmware sglahn/ota-server
+```
+
+The server can be tested with, e.g. curl:
+```
+url -X GET \
+  http://localhost:8000/firmware \
+    -H 'x-ESP8266-version: 1.0'
+```    
 
 Optional arguments:
 ```
@@ -30,8 +41,7 @@ ${project-name}-${version}.bin
 ```
 Where both, project-name and version are Strings. 
 
-Example: Given a file with the name *firmware-0.1.bin*, this would be served with the URL:
+Example: Given a file with the name *firmware-0.1.bin*, this would be served via the URL:
 ```
-http://server-ip:8000/firmware
+http://{host}:{port}/firmware
 ````
-
