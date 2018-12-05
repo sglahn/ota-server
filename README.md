@@ -8,15 +8,29 @@ Serves firmware binary files for Arduino (or ESP, ...) OTA projects.
 - SSL
 
 ## Usage
-Example usage:
+
+### Testing
 ```
 ./server.py --dir=/my-firmware-directory
 ```
-Or via Docker
+
+### Service
+The OTA-Server can be installed as a service, which means it will be automatically started in the background after a server reboot(currently the install script is only tested on raspbian):
+```
+./install.sh
+```
+The logs of the service can be retrieved via:
+```
+sudo journalctl -u ota-server
+```
+
+### Docker
+There is also a Docker image available on Docker Hub:
 ```
 docker run -p 8000:8000 -v /my-firmware-directory:/firmware sglahn/ota-server
 ```
 
+## Verify
 The server can be tested with, e.g. curl:
 ```
 url -X GET \
