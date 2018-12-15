@@ -19,6 +19,7 @@
 '''
 
 import os
+import re
 import argparse
 import hashlib
 import glob
@@ -28,12 +29,19 @@ import http.server
 from watchdog.observers import Observer
 from watchdog.events import RegexMatchingEventHandler
 
-FILE_PATTERNS = [r'.+[a-z]-\d.\d.bin']
+FILE_PATTERN = r'.+[a-z]-\d.\d.bin'
 FIRMWARE_DIRECTORY = os.environ['HOME'] + os.sep + "firmware"
 
 firmwares = {}
 
 class FileWatcher(RegexMatchingEventHandler):
+
+    def initalize(self):
+        regex = re.compile(FILE_PATTERN)
+        files = os.listdir(FIRMWARE_DIRECTORY)
+        for f in files:
+            if regex.match(f):
+                self.addFirmware(f)
 
     def getFirmwareName(self, path):
         fileName = os.path.basename(path)
@@ -43,9 +51,9 @@ class FileWatcher(RegexMatchingEventHandler):
         fileName = os.path.basename(path)
         return fileName[fileName.index('-') +1:fileName.index('.bin')]
 
-    def on_created(self, event):
-        name = self.getFirmwareName(event.src_path)
-        version = self.getFirmwareVersion(event.src_path)
+    def addFirmware(self, fileName):            
+        name = self.getFirmwareName(fileName)
+        version = self.getFirmwareVersion(fileName)
         if name in firmwares:
             currentVersions = firmwares[name]
             if version not in currentVersions:
@@ -53,16 +61,24 @@ class FileWatcher(RegexMatchingEventHandler):
                 firmwares[name] = sorted(currentVersions, reverse=True)
         else:
             firmwares[name] = [version]
-        print(firmwares)
 
-    def on_deleted(self, event):    
-        name = self.getFirmwareName(event.src_path)
-        version = self.getFirmwareVersion(event.src_path)
+    def removeFirmware(self, fileName):
+        name = self.getFirmwareName(fileName)
+        version = self.getFirmwareVersion(fileName)
         if name in firmwares:
             firmwares[name].remove(version)
             if len(firmwares[name]) == 0:
                 del firmwares[name]
-        print(firmwares)
+
+    def on_created(self, event):
+        self.addFirmware(event.src_path)
+
+    def on_deleted(self, event):    
+        self.removeFirmware(event.src_path)
+    
+    def on_moved(self, event):
+        self.removeFirmware(event.src_path)
+        self.addFirmware(event.dest_path)
 
 class HttpHandler(http.server.BaseHTTPRequestHandler):
 
@@ -124,7 +140,8 @@ if __name__ == '__main__':
 
     try:
         observer = Observer()
-        watcher = FileWatcher(regexes=FILE_PATTERNS, ignore_directories=True) 
+        watcher = FileWatcher(regexes=[FILE_PATTERN], ignore_directories=True) 
+        watcher.initalize()
         observer.schedule(watcher, path=FIRMWARE_DIRECTORY)
         observer.start()
 
