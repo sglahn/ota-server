@@ -25,27 +25,57 @@ import glob
 import logging
 import ssl
 import http.server
+from watchdog.observers import Observer
+from watchdog.events import RegexMatchingEventHandler
 
+FILE_PATTERNS = [r'.+[a-z]-\d.\d.bin']
 FIRMWARE_DIRECTORY = os.environ['HOME'] + os.sep + "firmware"
+
+firmwares = {}
+
+class FileWatcher(RegexMatchingEventHandler):
+
+    def getFirmwareName(self, path):
+        fileName = os.path.basename(path)
+        return fileName[:fileName.index('-')]
+
+    def getFirmwareVersion(self, path):
+        fileName = os.path.basename(path)
+        return fileName[fileName.index('-') +1:fileName.index('.bin')]
+
+    def on_created(self, event):
+        name = self.getFirmwareName(event.src_path)
+        version = self.getFirmwareVersion(event.src_path)
+        if name in firmwares:
+            currentVersions = firmwares[name]
+            if version not in currentVersions:
+                currentVersions.append(version)
+                firmwares[name] = sorted(currentVersions, reverse=True)
+        else:
+            firmwares[name] = [version]
+        print(firmwares)
+
+    def on_deleted(self, event):    
+        name = self.getFirmwareName(event.src_path)
+        version = self.getFirmwareVersion(event.src_path)
+        if name in firmwares:
+            firmwares[name].remove(version)
+            if len(firmwares[name]) == 0:
+                del firmwares[name]
+        print(firmwares)
 
 class HttpHandler(http.server.BaseHTTPRequestHandler):
 
-    def getLatestFirmwareVersion(self, flavor):
-        for firmware in os.listdir(FIRMWARE_DIRECTORY):
-            if firmware.startswith(flavor):
-                return firmware[firmware.index("-") +1:firmware.index('.bin')]
-        return -1     
-
-    def validRequest(self, flavor):
-        return glob.glob(FIRMWARE_DIRECTORY + os.sep + flavor + '*') and 'x-ESP8266-version' in self.headers
+    def validRequest(self, firmwareName):
+        return firmwareName in firmwares and 'x-ESP8266-version' in self.headers
 
     def buildHtmlResponse(self, status):
         self.send_response(status)
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
        
-    def buildStreamResponse(self, flavor, latest):
-        filename = FIRMWARE_DIRECTORY + os.sep + flavor + '-' + latest + ".bin"
+    def buildStreamResponse(self, firmwareName, latestFirmwareVersion):
+        filename = FIRMWARE_DIRECTORY + os.sep + firmwareName + '-' + latestFirmwareVersion + ".bin"
         self.send_response(200)
         self.send_header('Content-type', 'application/octet-stream')
         self.send_header('Content-Disposition', 'attachment; filename=' + filename)
@@ -57,18 +87,18 @@ class HttpHandler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         log_stat = { 'ip' : self.client_address[0] }
-        flavor = self.path.rsplit('/', 1)[-1]
+        firmwareName = self.path.rsplit('/', 1)[-1]
 
-        if not self.validRequest(flavor):
+        if not self.validRequest(firmwareName):
             logging.error('Invalid request', extra = log_stat)
             self.buildHtmlResponse(400)
             return
         
-        latest = self.getLatestFirmwareVersion(flavor)
-        firmware_version = self.headers.get('x-ESP8266-version')
-        if float(latest) > float(firmware_version):
-            logging.info('Sending firmware update for ' + flavor + ' from ' + firmware_version + ' to ' + latest + '.', extra = log_stat)
-            self.buildStreamResponse(flavor, latest)
+        latestFirmwareVersion = firmwares[firmwareName][0]
+        clientFirmwareVersion = self.headers.get('x-ESP8266-version')
+        if float(latestFirmwareVersion) > float(clientFirmwareVersion):
+            logging.info('Sending firmware update for ' + firmwareName + ' from ' + clientFirmwareVersion + ' to ' + latestFirmwareVersion + '.', extra = log_stat)
+            self.buildStreamResponse(firmwareName, latestFirmwareVersion)
             return
         else:
             logging.debug('No update available', extra = log_stat)
@@ -93,6 +123,11 @@ if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)-15s %(levelname)s %(ip)s --- %(message)s', level=args.log)
 
     try:
+        observer = Observer()
+        watcher = FileWatcher(regexes=FILE_PATTERNS, ignore_directories=True) 
+        observer.schedule(watcher, path=FIRMWARE_DIRECTORY)
+        observer.start()
+
         server = http.server.HTTPServer(('', args.port), HttpHandler)
         if args.cert:
             server.socket = ssl.wrap_socket(server.socket, certfile=args.cert, server_side=True)
