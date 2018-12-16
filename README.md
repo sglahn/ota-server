@@ -3,7 +3,7 @@
 Serves firmware binary files for Arduino (or ESP, ...) OTA projects.
 
 ## Features
-- Generic delivery of firmware images based on [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
+- Generic delivery of firmware images śupporting [Semantic Versioning](https://semver.org/spec/v2.0.0.html)
 - Self contained and pure Python, no additional web server needed
 - SSL
 
@@ -49,7 +49,7 @@ Optional arguments:
 ```
 
 ## Naming convention
-The OTA-Server follows the Semantic Versioning definition. Given a version number MAJOR.MINOR.PATCH, increment the:
+The OTA-Server supports the Semantic Versioning definition. Given a version number MAJOR.MINOR.PATCH, increment the:
 1. MAJOR version when you make incompatible API changes,
 2. MINOR version when you add functionality in a backwards-compatible manner, and
 3. PATCH version when you make backwards-compatible bug fixes.
