@@ -45,20 +45,13 @@ class Firmware(object):
         return "%s, %s, %s" % (self.name, self.fileName, self.version)
 
 class FileWatcher(RegexMatchingEventHandler):
-    firmwareFileMatchingRegex = re.compile(FILE_PATTERN)
-    
-    def printAvailableFirmwares(self):
-        print("List of available firmwares:")
-        for firmware in firmwares:
-            print(" %s" %(firmwares[firmware]))    
+    firmwareFileMatchingRegex = re.compile(FILE_PATTERN)  
 
-    def initalize(self):
+    def initalize(self, directory):
         firmwares.clear()
-
-        for f in os.listdir(FIRMWARE_DIRECTORY):
-            if self.firmwareFileMatchingRegex.match(f):
-                self.addFirmware(f)
-        self.printAvailableFirmwares()        
+        for firmware in os.listdir(directory):
+            if self.firmwareFileMatchingRegex.match(firmware):
+                self.addFirmware(firmware)
 
     def getFirmwareName(self, path):
         fileName = os.path.basename(path)
@@ -154,9 +147,10 @@ if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)-15s %(levelname)s %(ip)s --- %(message)s', level=args.log)
 
     try:
-        observer = Observer()
         watcher = FileWatcher(regexes=[FILE_PATTERN], ignore_directories=True) 
-        watcher.initalize()
+        watcher.initalize(FIRMWARE_DIRECTORY)
+        
+        observer = Observer()
         observer.schedule(watcher, path=FIRMWARE_DIRECTORY)
         observer.start()
 
@@ -169,4 +163,5 @@ if __name__ == '__main__':
 
     except KeyboardInterrupt:
         print('Shutting down httpserver')
+        observer.stop()
         server.socket.close()
