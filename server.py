@@ -26,28 +26,39 @@ import glob
 import logging
 import ssl
 import http.server
+from distutils.version import StrictVersion
 from watchdog.observers import Observer
 from watchdog.events import RegexMatchingEventHandler
 
-FILE_PATTERN = r'.+[a-z]-\d.\d.bin'
+FILE_PATTERN = r'.+[a-z]-(\d+\.)?(\d+\.)?(\*|\d+).bin'
 FIRMWARE_DIRECTORY = os.environ['HOME'] + os.sep + "firmware"
 
 firmwares = {}
 
 class Firmware(object):
-    def __init__(self, name, filePath, version):
+    def __init__(self, name, fileName, version):
         self.name = name
-        self.filePath = filePath
-        self.versions = [version]
-    
+        self.fileName = fileName
+        self.version = version
+
+    def __str__(self):
+        return "%s, %s, %s" % (self.name, self.fileName, self.version)
+
 class FileWatcher(RegexMatchingEventHandler):
+    firmwareFileMatchingRegex = re.compile(FILE_PATTERN)
+    
+    def printAvailableFirmwares(self):
+        print("List of available firmwares:")
+        for firmware in firmwares:
+            print(" %s" %(firmwares[firmware]))    
 
     def initalize(self):
-        regex = re.compile(FILE_PATTERN)
-        files = os.listdir(FIRMWARE_DIRECTORY)
-        for f in files:
-            if regex.match(f):
+        firmwares.clear()
+
+        for f in os.listdir(FIRMWARE_DIRECTORY):
+            if self.firmwareFileMatchingRegex.match(f):
                 self.addFirmware(f)
+        self.printAvailableFirmwares()        
 
     def getFirmwareName(self, path):
         fileName = os.path.basename(path)
@@ -61,27 +72,25 @@ class FileWatcher(RegexMatchingEventHandler):
         name = self.getFirmwareName(fileName)
         version = self.getFirmwareVersion(fileName)
         if name in firmwares:
-            currentVersions = firmwares[name]
-            if version not in currentVersions:
-                currentVersions.append(version)
-                firmwares[name] = sorted(currentVersions, reverse=True)
+            firmware = firmwares[name]
+            if StrictVersion(version) > StrictVersion(firmware.version):
+                firmware.version = version
+                firmware.fileName = fileName
         else:
-            firmwares[name] = [version]
+            firmwares[name] = Firmware(name, fileName, version)
 
     def removeFirmware(self, fileName):
         name = self.getFirmwareName(fileName)
         version = self.getFirmwareVersion(fileName)
         if name in firmwares:
-            firmwares[name].remove(version)
-            if len(firmwares[name]) == 0:
-                del firmwares[name]
+            self.initalize()
 
     def on_created(self, event):
         self.addFirmware(event.src_path)
 
     def on_deleted(self, event):    
         self.removeFirmware(event.src_path)
-    
+
     def on_moved(self, event):
         self.removeFirmware(event.src_path)
         self.addFirmware(event.dest_path)
@@ -96,8 +105,8 @@ class HttpHandler(http.server.BaseHTTPRequestHandler):
         self.send_header('Content-type', 'text/html; charset=utf-8')
         self.end_headers()
        
-    def buildStreamResponse(self, firmwareName, latestFirmwareVersion):
-        filename = FIRMWARE_DIRECTORY + os.sep + firmwareName + '-' + latestFirmwareVersion + ".bin"
+    def buildStreamResponse(self, firmware):
+        filename = FIRMWARE_DIRECTORY + os.sep + firmware.fileName
         self.send_response(200)
         self.send_header('Content-type', 'application/octet-stream')
         self.send_header('Content-Disposition', 'attachment; filename=' + filename)
@@ -116,11 +125,11 @@ class HttpHandler(http.server.BaseHTTPRequestHandler):
             self.buildHtmlResponse(400)
             return
         
-        latestFirmwareVersion = firmwares[firmwareName][0]
+        latestFirmwareVersion = firmwares[firmwareName].version
         clientFirmwareVersion = self.headers.get('x-ESP8266-version')
-        if float(latestFirmwareVersion) > float(clientFirmwareVersion):
+        if StrictVersion(latestFirmwareVersion) > StrictVersion(clientFirmwareVersion):
             logging.info('Sending firmware update for ' + firmwareName + ' from ' + clientFirmwareVersion + ' to ' + latestFirmwareVersion + '.', extra = log_stat)
-            self.buildStreamResponse(firmwareName, latestFirmwareVersion)
+            self.buildStreamResponse(firmwares[firmwareName])
             return
         else:
             logging.debug('No update available', extra = log_stat)
