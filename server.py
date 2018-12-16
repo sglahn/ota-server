@@ -34,6 +34,12 @@ FIRMWARE_DIRECTORY = os.environ['HOME'] + os.sep + "firmware"
 
 firmwares = {}
 
+class Firmware(object):
+    def __init__(self, name, filePath, version):
+        self.name = name
+        self.filePath = filePath
+        self.versions = [version]
+    
 class FileWatcher(RegexMatchingEventHandler):
 
     def initalize(self):
